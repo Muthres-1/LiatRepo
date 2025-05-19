@@ -64,7 +64,8 @@ import {
   updateTransientBalance,
   readRedeployStaticParamsAndKernel,
   writeRedeployStaticParamsAndKernel,
-  getPoolLockSlot
+  getPoolLockSlot,
+  checkBurntPosition
 } from "./utilities/Transient.sol";
 import {
   readGrowthPortions,
@@ -432,6 +433,9 @@ contract NofeeswapDelegatee is INofeeswapDelegatee {
     }
     updateTransientBalance(msg.sender, getTag0(), amount0);
     updateTransientBalance(msg.sender, getTag1(), amount1);
+
+    // Cannot mint a position which is burnt in the same transaction.
+    checkBurntPosition(getPoolId(), qMin, qMax, getShares());
 
     // Total supply of this LP position (see ERC6909 specifications).
     updateTotalSupply(getPoolId(), qMin, qMax, getShares());

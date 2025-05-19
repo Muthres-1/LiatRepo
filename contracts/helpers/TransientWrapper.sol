@@ -185,6 +185,39 @@ contract TransientWrapper {
     ) = readReserve();
   }
 
+  function _burntPositionSlot() public returns (
+    uint256 transientSlot
+  ) {
+    return burntPositionSlot;
+  }
+
+  function _checkBurntPosition(
+    uint256 poolId,
+    X59 qMin,
+    X59 qMax,
+    int256 shares,
+    uint256 transientSlot
+  ) public returns (
+    uint256 content
+  ) {
+    checkBurntPosition(poolId, qMin, qMax, shares);
+    return readUint256Transient(transientSlot);
+  }
+
+  function _checkBurntPositionBurnMint(
+    uint256 poolId,
+    X59 qMin,
+    X59 qMax,
+    int256 shares,
+    uint256 transientSlot
+  ) public returns (
+    uint256 content
+  ) {
+    checkBurntPosition(poolId, qMin, qMax, 0 - shares);
+    checkBurntPosition(poolId, qMin, qMax, shares);
+    return readUint256Transient(transientSlot);
+  }
+
   function _redeployStaticParamsAndKernelSlot() public returns (
     uint256 transientSlot
   ) {

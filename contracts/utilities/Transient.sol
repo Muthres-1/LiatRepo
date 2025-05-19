@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import {getPoolId} from "./Memory.sol";
 import {Index} from "./Index.sol";
 import {X47} from "./X47.sol";
+import {X59} from "./X59.sol";
 import {Tag} from "./Tag.sol";
 import {
   AlreadyUnlocked,
@@ -11,7 +12,8 @@ import {
   PoolIsLocked,
   DeploymentFailed,
   CannotRedeployStaticParamsAndKernelExternally,
-  NativeTokenCannotBeSynced
+  NativeTokenCannotBeSynced,
+  CannotMintAfterBurning
 } from "./Errors.sol";
 
 /// @notice Writes a single slot on transient storage.
@@ -403,6 +405,67 @@ function writeReserveValue(
   // The dedicated space in transient storage is populated with the 'reserve'
   // value.
   writeTransient(reserveSlot, reserve);
+}
+
+//////////////////////////////////////////////////////////////// burnt position
+
+// uint128(uint256(keccak256("burntPosition"))) - 1
+uint128 constant burntPositionSlot = 0x1605FC00905ADEB7C36AAFA65ECDD6BD;
+
+/// @notice This function checks the corresponding transient slot which
+/// indicate weather a specific position has been burnt within the present
+/// transaction.
+///
+/// @param poolId The pool identifier hosting this liquidity position.
+/// @param qMin Equal to '(2 ** 59) * (16 + log(pMin / pOffset))' where 'pMin'
+/// is the left position boundary.
+/// @param qMax Equal to '(2 ** 59) * (16 + log(pMax / pOffset))' where 'pMax'
+/// is the right position boundary.
+/// @param shares The number of shares to be added/removed.
+function checkBurntPosition(
+  uint256 poolId,
+  X59 qMin,
+  X59 qMax,
+  int256 shares
+) {
+  uint256 transientSlot;
+  assembly {
+    // We populate the first two memory slots from right to left:
+    //
+    //  0                                 32     40     48                  64
+    //  |                                 |      |      |                   |
+    //  +---------------------------------+------+------+-------------------+
+    //  |              poolId             | qMin | qMax | burntPositionSlot |
+    //  +---------------------------------+------+------+-------------------+
+    //
+
+    // Populates the least significant 16 bytes of the memory slot 1 (from 48
+    // to 64).
+    mstore(32, burntPositionSlot) // 32 = 64 - 32
+
+    // Populates the bytes 40 to 48 of memory.
+    mstore(16, qMax) // 16 = 48 - 32
+
+    // Populates the most significant 8 bytes of the memory slot 1 (from 40 to
+    // 48).
+    mstore(8, qMin) // 0 = 40 - 32
+
+    // Populates the entire memory slot 0.
+    mstore(0, poolId) // 0 = 32 - 32
+
+    // Calculates the resulting hash and reads the corresponding transient
+    // storage slot.
+    transientSlot := keccak256(0, 64)
+  }
+
+  if (shares > 0) {
+    require(
+      readUint256Transient(transientSlot) == 0,
+      CannotMintAfterBurning(poolId, qMin, qMax)
+    );
+  } else {
+    writeTransient(transientSlot, type(uint256).max);
+  }
 }
 
 ///////////////////////////////////// Static parameters and kernel redeployment

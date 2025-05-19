@@ -32,6 +32,28 @@ portion1 = 0xF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00F
 index0 = 0x0000000000000000000000000000000000000000000000000000000000000000
 index1 = 0xF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00F
 
+value0 = 0x0000000000000000000000000000000000000000000000000000000000000000
+value1 = 0x0000000000000000000000000000000000000000000000000000000000000001
+value2 = 0xF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00F
+value3 = 0x8FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+value4 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+balance0 = 0x00000000000000000000000000000000
+balance1 = 0x00000000000000000000000000000001
+balance2 = 0xF00FF00FF00FF00FF00FF00FF00FF00F
+balance3 = 0x8FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+balance4 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+balance5 = 0 - 0x00000000000000000000000000000001
+balance6 = 0 - 0xF00FF00FF00FF00FF00FF00FF00FF00F
+balance7 = 0 - 0x8FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+balance8 = 0 - 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+logPrice0 = 0x0000000000000000
+logPrice1 = 0x0000000000000001
+logPrice2 = 0xF00FF00FF00FF00F
+logPrice3 = 0x8FFFFFFFFFFFFFFF
+logPrice4 = 0xFFFFFFFFFFFFFFFF
+
 @pytest.fixture(autouse=True)
 def wrapper(fn_isolation):
     return TransientWrapper.deploy({'from': accounts[0]})
@@ -236,6 +258,49 @@ def test_writeReadReserve(wrapper, token, id, reserve, multiToken, request, work
         assert multiTokenResult == multiToken
         if multiToken:
             assert tokenIdResult == id
+
+def test_burntPositionSlot(wrapper, request, worker_id):
+    logTest(request, worker_id)
+    
+    # Check if the hash is calculated correctly.
+    tx = wrapper._burntPositionSlot()
+    transientSlot = tx.return_value
+    assert transientSlot == (keccak256('burntPosition') - 1) % (1 << 128)
+
+@pytest.mark.parametrize('shares', [balance0, balance1, balance2, balance4, balance5, balance6, balance7, balance8])
+@pytest.mark.parametrize('qMin', [logPrice0, logPrice1, logPrice2, logPrice3, logPrice4])
+@pytest.mark.parametrize('qMax', [logPrice0, logPrice1, logPrice2, logPrice3, logPrice4])
+@pytest.mark.parametrize('poolId', [value0, value1, value2, value3, value4])
+def test_checkBurntPosition(wrapper, shares, qMin, qMax, poolId, request, worker_id):
+    logTest(request, worker_id)
+    
+    # Check if burntPosition is set correctly.
+    transientSlot = keccakPacked(['uint256', 'uint64', 'uint64', 'uint128'], [poolId, qMin, qMax, (keccak256('burntPosition') - 1) % (1 << 128)])
+    tx = wrapper._checkBurntPosition(poolId, qMin, qMax, shares, transientSlot)
+    result = tx.return_value
+
+    if shares > 0:
+        assert result == 0
+    else:
+        assert result == (1 << 256) - 1
+
+@pytest.mark.parametrize('shares', [balance1, balance2, balance4, balance5, balance6, balance7, balance8])
+@pytest.mark.parametrize('qMin', [logPrice0, logPrice1, logPrice2, logPrice3, logPrice4])
+@pytest.mark.parametrize('qMax', [logPrice0, logPrice1, logPrice2, logPrice3, logPrice4])
+@pytest.mark.parametrize('poolId', [value0, value1, value2, value3, value4])
+def test_checkBurntPositionBurnMint(wrapper, shares, qMin, qMax, poolId, request, worker_id):
+    logTest(request, worker_id)
+    
+    # Check if burntPosition is set correctly.
+    transientSlot = keccakPacked(['uint256', 'uint64', 'uint64', 'uint128'], [poolId, qMin, qMax, (keccak256('burntPosition') - 1) % (1 << 128)])
+
+    if shares > 0:
+        with brownie.reverts('CannotMintAfterBurning: ' + str(poolId) + ', ' + str(qMin) + ', ' + str(qMax)):
+            tx = wrapper._checkBurntPositionBurnMint(poolId, qMin, qMax, shares, transientSlot)
+    else:
+        tx = wrapper._checkBurntPositionBurnMint(poolId, qMin, qMax, shares, transientSlot)
+        result = tx.return_value
+        assert result == (1 << 256) - 1
 
 def test_redeployStaticParamsAndKernelSlot(wrapper, request, worker_id):
     logTest(request, worker_id)

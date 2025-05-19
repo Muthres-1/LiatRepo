@@ -289,3 +289,7 @@ error AdminCannotBeAddressZero();
 
 /// @notice Thrown when attempting to settle a tag with nonzero 'msg.value'.
 error MsgValueIsNonZero(uint256 msgValue);
+
+/// @notice Thrown when attempting to mint a position after burning it in the
+/// same transaction.
+error CannotMintAfterBurning(uint256 poolId, X59 qMin, X59 qMax);
