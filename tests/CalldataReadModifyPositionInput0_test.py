@@ -10,7 +10,7 @@ maxHookDataByteCount = 0xFFFF
 
 zeroForOne0 = 0
 zeroForOne1 = 1
-zeroForOne2 = 2
+zeroForOne2 = 2 
 zeroForOne3 = 3
 zeroForOne4 = 4
 

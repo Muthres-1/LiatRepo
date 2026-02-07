@@ -173,7 +173,7 @@ contract PriceWrapper {
     X15 c0,
     X15 c1
   ) public returns (
-    X59 b0Result,
+    X59 b0Result, 
     X59 b1Result,
     X15 c0Result,
     X15 c1Result

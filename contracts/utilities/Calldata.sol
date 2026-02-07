@@ -8,7 +8,7 @@ import {
   _zeroForOne_,
   setMsgSender,
   setPoolId,
-  setSqrtOffset,
+  setSqrtOffset, 
   setSqrtInverseOffset,
   setTag0,
   setTag1,
@@ -151,6 +151,7 @@ function readInitializeInput() view returns (KernelCompact kernelCompact) {
     setPoolGrowthPortion(poolGrowthPortion);
   }
 
+// Here we are reading 'kernelCompact', 'curve', and 'hookData' from calldata and placing each in the appropriate memory location. The layout of these three inputs in calldata is dynamic and determined by the byte count of 'kernelCompact' which is given in calldata. After placing these three inputs in memory, the free memory pointer is set accordingly to point to the end of the memory occupied by these three inputs.
   {
     // This is the pointer referring to the start of the kernel in memory.
     Kernel kernel;
@@ -167,7 +168,7 @@ function readInitializeInput() view returns (KernelCompact kernelCompact) {
       // kernel starts immediately after static parameters in memory.
       kernel := _endOfStaticParams_
 
-      // The number of bytes to be occupied by 'kernelCompact'.
+      // The number of bytes to be occupied by 'kernelCompact' in memory.
       kernelCompactByteCount := shl(5, calldataload(kernelCompactStart))
 
       // Each breakpoint occupies 80-bits in 'kernelCompact'.
@@ -178,13 +179,18 @@ function readInitializeInput() view returns (KernelCompact kernelCompact) {
       // bound on the number of bytes to be occupied by 'kernel'.
       // Since 'kernelCompact' comes immediately after 'kernel' in memory, we
       // need to set its memory pointer accordingly.
-      kernelCompact := add(kernel, shl(5, div(kernelCompactByteCount, 5)))
+      kernelCompact := add(kernel, shl(5, div(kernelCompactByteCount, 5))) // A memory pointer (address) where the compact kernel data will be stored in memory while kernalCompactStart is a calldata pointer (offset) where the compact kernel data starts in calldata. 
+//       Memory example:
+
+// | kernel | kernelCompact | curve |
+//             ^
+//             pointer stored in kernelCompact
     }
     setKernel(kernel);
 
+
     {
-      // This is the pointer referring to the start of the curve sequence in
-      // memory.
+      // This is the pointer referring to the start of the curve sequence in memory.
       Curve curve;
 
       // This value refers to the start of 'curveArray' in calldata.
@@ -236,9 +242,23 @@ function readInitializeInput() view returns (KernelCompact kernelCompact) {
 
           // The total number of bytes to be given to the hook as input.
           // 32 is subtracted to exclude the '_hookInputByteCount_' slot.
-          hookInputByteCount := 
-            sub(sub(freeMemoryPointer, _hookInputByteCount_), 32)
+          hookInputByteCount := sub(sub(freeMemoryPointer, _hookInputByteCount_), 32) 
+          // So the result is:
+          // hookInputByteCount = actual number of bytes of input that the hook will receive
+          // _hookInputByteCount_ = → starting memory location where hook-input snapshot begins
+          // Simple mental picture
+          // Memory:
+          // [_hookInputByteCount_]   -> slot storing length
+          // [data_for_hook ..........]
+          //                          ^
+          //                          freeMemoryPointer
 
+
+          // So calculation is basically:
+          // payload_size = end_of_memory − start_of_payload − 32
+
+
+          // calldatacopy(source, destination, length)
           // Data is copied from calldata to memory.
           calldatacopy(
             kernelCompact,
@@ -271,6 +291,32 @@ function readInitializeInput() view returns (KernelCompact kernelCompact) {
     }
   }
 }
+// for above Key points on why curve pointer can be set early while hook data pointers cannot:
+
+// setCurve(curve) is not writing the curve data,
+// it is only storing the pointer (address) where the curve will exist in memory.
+
+// So the sequence is:
+// Calculate where curve WILL be stored 
+// Save that address using setCurve(curve)
+// Later copy actual bytes into that address using calldatacopy
+
+// This is valid because the address is already correct even if the bytes are not yet copied.
+
+// Why hookData setters cannot always be moved
+
+// Some setters depend on values that are only finalized after memory building, such as:
+// hookInputByteCount
+// freeMemoryPointer
+// offsets computed after full layout
+
+// Those may change during layout construction, so writing them early can produce wrong metadata.
+// But curve pointer is deterministic immediately:
+// curve = kernelCompact + kernelCompactByteCount
+
+// This address does not change later → safe to store early.
+
+
 
 /// @notice Reads inputs of the external function 'modifyPosition' and places
 /// each in the appropriate memory location.
@@ -373,8 +419,7 @@ function readModifyPositionInput() view {
       freeMemoryPointer := add(hookData, hookDataByteCount)
 
       // The total number of bytes to be given to the hook as input.
-      hookInputByteCount := 
-        sub(sub(freeMemoryPointer, _hookInputByteCount_), 32)
+      hookInputByteCount := sub(sub(freeMemoryPointer, _hookInputByteCount_), 32)
 
       // Data is copied from calldata to memory.
       calldatacopy(
@@ -706,14 +751,24 @@ function readSwapInput() view {
   X127 amountSpecified;
   assembly {
     amountSpecified := calldataload(36)
-    if slt(amountSpecified, sub(0, 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)) {
+    // slt and sgt are EVM assembly (Yul) comparison opcodes:
+    // slt(a, b) → signed less than → returns 1 if a < b (signed), else 0, signed less than = slt
+    // sgt(a, b) → signed greater than → returns 1 if a > b (signed), else 0 , signed greater than = sgt
+  
+    if slt(amountSpecified, sub(0, 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)) { // MAX_INT128 = 0x7FFF...FFF
       amountSpecified := sub(0, 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
     }
-    if sgt(amountSpecified, 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF) {
+    if sgt(amountSpecified, 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF) { // MAX_INT128 = 0x7FFF...FFF
       amountSpecified := 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     }
     amountSpecified := mul(amountSpecified, shl(127, 1))
+    // shl(127, 1) = 2^127
+    // So:
+    // amountSpecified = amountSpecified × 2^127
+    // This converts the integer into Q127 fixed-point representation (X127) used internally for precise AMM math. This multiplication increase precision, AMM math needs fractional precision.
+
   }
+
   setAmountSpecified(amountSpecified);
 
   // 'logPriceLimit' is read from calldata and placed in memory.
@@ -723,10 +778,25 @@ function readSwapInput() view {
   }
   setLogPriceLimit(logPriceLimit);
 
+  // 1. logPriceLimit: Defines the maximum price boundary the swap is allowed to reach.
+  // Meaning: "Do the swap, but stop if price reaches this limit."
+
+  // 2. crossThreshold: Controls how many ticks / price ranges the swap engine is allowed to cross in one execution (performance / safety limiter).
+  // Meaning: "Swap can move price, but don't cross too many ranges at once."
+
+  // 3. zeroForOne: Direction of the swap. If true (1), swap token0 for token1; if false (0), swap token1 for token0.
+  // 4. amountSpecified: The exact amount of tokens to swap. Positive values indicate the amount input to the pool, negative values indicate the amount output from the pool.
+  // 5. poolId: Identifies the specific liquidity pool where the swap will occur.
+  // 6. msg.sender: The address initiating the swap, used for authorization and tracking.
+  // 7. hookData: Additional data passed to custom logic hooks during the swap process.
+
   // 'crossThreshold' is read from calldata and placed in memory.
   uint256 crossThreshold;
   assembly {
-    crossThreshold := shr(128, calldataload(100))
+    // → removes lower 16 bytes
+    // → keeps upper 16 bytes (128 bits)
+    crossThreshold := shr(128, calldataload(100)) // second argument of shr is the number of bits to shift right, so this is dividing by 2^128 while in normal cpp second argument is the number of bits to shift right, so this is dividing by 2^128
+    // gt(a,b) = (unsigned) greater than → returns 1 if a > b, shr = shift right
     if gt(crossThreshold, 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF) {
       crossThreshold := 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     }
@@ -734,6 +804,15 @@ function readSwapInput() view {
   setCrossThreshold(crossThreshold);
 
   // 'zeroForOne' is read from calldata, capped by '2' and placed in memory.
+  // Step-by-step explanation of the assembly code for reading 'zeroForOne':
+// Read calldata at position 116
+// Extract upper 128 bits
+// Ensure:
+// zeroForOne <= 2
+// Store 1 byte in memory
+// mstore8(_zeroForOne_, zeroForOne)
+// so memory variable _zeroForOne_ now holds 0,1,2 only.
+// This prevents invalid values like 200.
   assembly {
     let zeroForOne := shr(128, calldataload(116))
     if gt(zeroForOne, 2) {
@@ -811,3 +890,28 @@ function readCollectInput() pure {
   // Determines the largest used memory slot.
   setFreeMemoryPointer(_swapInput_);
 }
+
+
+// Calldata reader usage map
+// Reader function	                Called by external function                     	When used	                             What it loads into memory
+// readInitializeInput()	              initialize()	                    When a new pool is created	                    poolId, tags, growth portion, kernel, kernelCompact, curve, hookData
+// readModifyPositionInput()	          modifyPosition()	                When liquidity is added/removed	                poolId, logPriceMin/Max, shares, curve pointer, hookData
+// readDonateInput()	                  donate()	                        When liquidity is donated to pool	              poolId, shares, curve pointer, hookData
+// readModifyKernelInput()	            modifyKernel()	                  When kernel configuration is updated	          poolId, kernel, kernelCompact, hookData
+// readModifyPoolGrowthPortionInput()	modifyPoolGrowthPortion()	        When pool fee/growth portion is changed	          poolId, poolGrowthPortion
+// readUpdateGrowthPortionsInput()	    updateGrowthPortions()	          When growth portions are refreshed	            poolId only
+// readSwapInput()	                    swap()	                          During token swap execution	                    poolId, amountSpecified, logPriceLimit, crossThreshold, zeroForOne, hookData, kernel
+// readCollectInput()	                collectPool() / collectProtocol()	When fees are collected	                          poolId only
+
+// One-line core idea
+// All readXInput() functions decode calldata and construct the exact memory layout required by that specific action (swap, initialize, modify position, etc.).
+// You never choose them manually — each external function internally calls its corresponding reader.
+
+// Very important mental shortcut (senior-level understanding)
+
+// Think of these readers as:
+// initialize()        → build FULL pool setup memory
+// swap()              → build swap execution memory
+// modifyPosition()    → build LP position memory
+// modifyKernel()      → build kernel update memory
+// collect()           → build minimal memory (poolId only)

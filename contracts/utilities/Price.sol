@@ -472,7 +472,7 @@ library PriceLibrary {
       mcopy(pointer0, pointer1, 62)
     }
   }
-
+ 
   /// @notice Copies a price with height from one memory pointer to another
   /// each with the following layout:
   ///

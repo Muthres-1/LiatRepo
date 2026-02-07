@@ -9,11 +9,6 @@ using PriceLibrary for uint256;
 /// @notice This file contains deliberately injected bugs for testing Echidna effectiveness
 /// @dev DO NOT USE IN PRODUCTION - FOR TESTING ONLY
 contract PriceTestWithBug {
-    // Epsilon values
-    uint256 constant epsilonX15 = 1;
-    uint256 constant epsilonX59 = 1;
-    uint256 constant epsilonX216 = 1;
-
     // ============================================
     // TEST WITH DELIBERATE BUG: Incorrect offset in storePrice
     // ============================================
@@ -28,11 +23,12 @@ contract PriceTestWithBug {
     ) public pure {
         // Generate random values
         X59 logPrice = X59.wrap(int256(uint256(1 + (seedLog % ((2 ** 64) - 1)))));
-        X216 sqrtPrice = X216.wrap(int256(uint256(seedSqrt) % uint256(X216.unwrap(oneX216 - X216.wrap(int256(epsilonX216))))));
-        X216 sqrtInversePrice = X216.wrap(int256(uint256(seedSqrtInv) % uint256(X216.unwrap(oneX216 - X216.wrap(int256(epsilonX216))))));
+        int256 maxValue = X216.unwrap(oneX216) - X216.unwrap(epsilonX216);
+        X216 sqrtPrice = X216.wrap(int256(uint256(seedSqrt) % uint256(maxValue)));
+        X216 sqrtInversePrice = X216.wrap(int256(uint256(seedSqrtInv) % uint256(maxValue)));
         
-        if (sqrtPrice < epsilonX216) sqrtPrice = X216.wrap(int256(epsilonX216));
-        if (sqrtInversePrice < epsilonX216) sqrtInversePrice = X216.wrap(int256(epsilonX216));
+        if (sqrtPrice < epsilonX216) sqrtPrice = epsilonX216;
+        if (sqrtInversePrice < epsilonX216) sqrtInversePrice = epsilonX216;
         
         uint256 pointer = get_a_price_pointer();
         
@@ -71,11 +67,12 @@ contract PriceTestWithBug {
     ) public pure {
         X15 heightPrice = X15.wrap(uint16(seedHeight) % uint16(X15.unwrap(oneX15) + 1));
         X59 logPrice = X59.wrap(int256(uint256(1 + (seedLog % ((2 ** 64) - 1)))));
-        X216 sqrtPrice = X216.wrap(int256(uint256(seedSqrt) % uint256(X216.unwrap(oneX216 - X216.wrap(int256(epsilonX216))))));
-        X216 sqrtInversePrice = X216.wrap(int256(uint256(seedSqrtInv) % uint256(X216.unwrap(oneX216 - X216.wrap(int256(epsilonX216))))));
+        int256 maxValue = X216.unwrap(oneX216) - X216.unwrap(epsilonX216);
+        X216 sqrtPrice = X216.wrap(int256(uint256(seedSqrt) % uint256(maxValue)));
+        X216 sqrtInversePrice = X216.wrap(int256(uint256(seedSqrtInv) % uint256(maxValue)));
         
-        if (sqrtPrice < epsilonX216) sqrtPrice = X216.wrap(int256(epsilonX216));
-        if (sqrtInversePrice < epsilonX216) sqrtInversePrice = X216.wrap(int256(epsilonX216));
+        if (sqrtPrice < epsilonX216) sqrtPrice = epsilonX216;
+        if (sqrtInversePrice < epsilonX216) sqrtInversePrice = epsilonX216;
         
         uint256 pointer = get_a_price_pointer();
         
@@ -102,11 +99,12 @@ contract PriceTestWithBug {
         uint216 seedSqrtInv
     ) public pure {
         X59 logPrice = X59.wrap(int256(uint256(1 + (seedLog % ((2 ** 64) - 1)))));
-        X216 sqrtPrice = X216.wrap(int256(uint256(seedSqrt) % uint256(X216.unwrap(oneX216 - X216.wrap(int256(epsilonX216))))));
-        X216 sqrtInversePrice = X216.wrap(int256(uint256(seedSqrtInv) % uint256(X216.unwrap(oneX216 - X216.wrap(int256(epsilonX216))))));
+        int256 maxValue = X216.unwrap(oneX216) - X216.unwrap(epsilonX216);
+        X216 sqrtPrice = X216.wrap(int256(uint256(seedSqrt) % uint256(maxValue)));
+        X216 sqrtInversePrice = X216.wrap(int256(uint256(seedSqrtInv) % uint256(maxValue)));
         
-        if (sqrtPrice < epsilonX216) sqrtPrice = X216.wrap(int256(epsilonX216));
-        if (sqrtInversePrice < epsilonX216) sqrtInversePrice = X216.wrap(int256(epsilonX216));
+        if (sqrtPrice < epsilonX216) sqrtPrice = epsilonX216;
+        if (sqrtInversePrice < epsilonX216) sqrtInversePrice = epsilonX216;
         
         uint256 pointer;
         assembly {
@@ -115,8 +113,8 @@ contract PriceTestWithBug {
         }
         
         // Fill surrounding memory with known pattern
-        uint256 beforePattern = 0xDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF;
-        uint256 afterPattern = 0xCAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFE;
+        uint256 beforePattern = 0xDEADBEEFDEADBEEFDEADBEEFDEADBEEF;
+        uint256 afterPattern = 0xCAFEBABECAFEBABECAFEBABE;
         
         assembly {
             mstore(sub(pointer, 32), beforePattern)
@@ -129,22 +127,22 @@ contract PriceTestWithBug {
         pointer.storePrice(logPrice, sqrtPrice, sqrtInversePrice);
         
         // Check for corruption - if Echidna finds this failing, there's a bug
+        bool corrupted = false;
         assembly {
-            let corrupted := 0
             if iszero(eq(mload(sub(pointer, 32)), beforePattern)) {
-                corrupted := 1
+                corrupted := true
             }
             if iszero(eq(mload(sub(pointer, 64)), beforePattern)) {
-                corrupted := 1
+                corrupted := true
             }
             if iszero(eq(mload(add(pointer, 62)), afterPattern)) {
-                corrupted := 1
+                corrupted := true
             }
             if iszero(eq(mload(add(pointer, 94)), afterPattern)) {
-                corrupted := 1
+                corrupted := true
             }
-            assert(iszero(corrupted))
         }
+        assert(!corrupted);
     }
 
     /// @notice BUG INJECTED: Copy function corruption
@@ -155,21 +153,27 @@ contract PriceTestWithBug {
         uint216 seedSqrtInv
     ) public pure {
         X59 logPrice = X59.wrap(int256(uint256(1 + (seedLog % ((2 ** 64) - 1)))));
-        X216 sqrtPrice = X216.wrap(int256(uint256(seedSqrt) % uint256(X216.unwrap(oneX216 - X216.wrap(int256(epsilonX216))))));
-        X216 sqrtInversePrice = X216.wrap(int256(uint256(seedSqrtInv) % uint256(X216.unwrap(oneX216 - X216.wrap(int256(epsilonX216))))));
+        int256 maxValue = X216.unwrap(oneX216) - X216.unwrap(epsilonX216);
+        X216 sqrtPrice = X216.wrap(int256(uint256(seedSqrt) % uint256(maxValue)));
+        X216 sqrtInversePrice = X216.wrap(int256(uint256(seedSqrtInv) % uint256(maxValue)));
         
-        if (sqrtPrice < epsilonX216) sqrtPrice = X216.wrap(int256(epsilonX216));
-        if (sqrtInversePrice < epsilonX216) sqrtInversePrice = X216.wrap(int256(epsilonX216));
+        if (sqrtPrice < epsilonX216) sqrtPrice = epsilonX216;
+        if (sqrtInversePrice < epsilonX216) sqrtInversePrice = epsilonX216;
         
         uint256 pointer0 = get_a_price_pointer();
         uint256 pointer1 = get_a_price_pointer();
         
         // Fill memory around both pointers
+        uint256 before0 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+        uint256 after0 = 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+        uint256 before1 = 0xCCCCCCCCCCCCCCCCCCCCCCCCCCCC;
+        uint256 after1 = 0xDDDDDDDDDDDDDDDDDDDDDDDDDDDD;
+        
         assembly {
-            mstore(sub(pointer0, 32), 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
-            mstore(add(pointer0, 62), 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)
-            mstore(sub(pointer1, 32), 0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC)
-            mstore(add(pointer1, 62), 0xDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD)
+            mstore(sub(pointer0, 32), before0)
+            mstore(add(pointer0, 62), after0)
+            mstore(sub(pointer1, 32), before1)
+            mstore(add(pointer1, 62), after1)
         }
         
         // Store at pointer1
@@ -188,21 +192,21 @@ contract PriceTestWithBug {
         assert(sqrtInverseResult0 == sqrtInversePrice);
         
         // Verify surrounding memory not corrupted
+        bool corrupted = false;
         assembly {
-            let corrupted := 0
-            if iszero(eq(mload(sub(pointer0, 32)), 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)) {
-                corrupted := 1
+            if iszero(eq(mload(sub(pointer0, 32)), before0)) {
+                corrupted := true
             }
-            if iszero(eq(mload(add(pointer0, 62)), 0xAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB)) {
-                corrupted := 1
+            if iszero(eq(mload(add(pointer0, 62)), after0)) {
+                corrupted := true
             }
-            if iszero(eq(mload(sub(pointer1, 32)), 0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC)) {
-                corrupted := 1
+            if iszero(eq(mload(sub(pointer1, 32)), before1)) {
+                corrupted := true
             }
-            if iszero(eq(mload(add(pointer1, 62)), 0xDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD)) {
-                corrupted := 1
+            if iszero(eq(mload(add(pointer1, 62)), after1)) {
+                corrupted := true
             }
-            assert(iszero(corrupted))
         }
+        assert(!corrupted);
     }
 }

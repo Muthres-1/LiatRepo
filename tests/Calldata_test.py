@@ -10,7 +10,7 @@ from Tag_test import tag2, tag3
 maxCurveIndex = 0xFFFF
 maxKernelIndex = 1020
 maxHookDataByteCount = 0xFFFF
-
+ 
 zeroForOne0 = 0
 zeroForOne1 = 1
 zeroForOne2 = 2
