@@ -6,7 +6,7 @@ import {X59} from "./X59.sol";
 import {X216} from "./X216.sol";
 
 library PriceLibrary {
-  using PriceLibrary for uint256;
+  using PriceLibrary for uint256; 
 
   /// @notice Stores a given price in a given memory location with the 
   /// following layout:
@@ -60,8 +60,8 @@ library PriceLibrary {
       // Then we move '256' bits backward to point to the beginning of the slot
       // whose least significant '216' bits are supposed to host
       // 'sqrtInversePrice'.
-      //
       // '64 + 216 + 216 - 256' bits == '30' bytes.
+      // 8+27+27-32 == 30byte
       mstore(add(pointer, 30), sqrtInversePrice)
 
       // We move '64 + 216' bits forward to reach the following location:
@@ -188,7 +188,7 @@ library PriceLibrary {
       // The preceding slot is cached so that it can be restored after we place
       // all values in their appropriate memory location.
       // The subtraction is safe because of the input requirement on 'pointer'.
-      let precedingPointer := sub(pointer, 34)
+      let precedingPointer := sub(pointer, 34) // for this memory reserved starts from ptr - 2 to ptr + 62, which is free before storing this data.
       let precedingSlot := mload(precedingPointer)
 
       // We move '64 + 216 + 216' bits forward to reach the following location:
@@ -471,7 +471,7 @@ library PriceLibrary {
       // next.
       mcopy(pointer0, pointer1, 62)
     }
-  }
+  } 
  
   /// @notice Copies a price with height from one memory pointer to another
   /// each with the following layout:

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "./FuzzUtilities.sol";
-
+ 
 using PriceLibrary for uint256; 
 
 /// @title Echidna tests for Price.sol library
@@ -103,7 +103,7 @@ contract PriceTest {
         
         uint256 pointer = get_a_price_pointer();
         
-        // Write height at pointer (pointer must point to height location)
+        // Here it should be mstore(sub(pointer, 2), shl(240, height)) to correct but we did as following so it will show failure
         assembly {
             mstore(sub(pointer, 32), shl(240, height))
         }
@@ -307,7 +307,7 @@ contract PriceTest {
         // Store patterns in surrounding memory
         assembly {
             // Fill 3 slots before pointer
-            mstore(sub(pointer, 32), beforePattern)
+            mstore(sub(pointer, 32), beforePattern) // Here we should not start from pointer -32 while it should start from pointer - 34 but we did as following so it will show failure
             mstore(sub(pointer, 64), beforePattern)
             mstore(sub(pointer, 96), beforePattern)
             
@@ -368,7 +368,7 @@ contract PriceTest {
         // Allocate pointer
         uint256 pointer;
         assembly {
-            pointer := add(mload(0x40), 2)
+            pointer := add(mload(0x40), 2) // 0x40 returns the next free memory slot 
             mstore(0x40, add(pointer, 128))
         }
         

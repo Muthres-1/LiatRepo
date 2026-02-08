@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
-
+  
 import {CalldataWrapper} from "../contracts/helpers/CalldataWrapper.sol";
 import { _endOfStaticParams_, getFreeMemoryPointer } from "../contracts/utilities/Memory.sol";
 
@@ -15,7 +15,7 @@ contract CalldataTest {
         hookOffset = hookOffset % 256;
         uint16 hookSize = uint16((rawHookSize % MAX_HOOK_SIZE) + 1);
         
-        uint256 totalSize = 260 + hookOffset + hookSize;
+        uint256 totalSize = 168 + hookOffset + hookSize;
         bytes memory cd = new bytes(totalSize);
         
         for (uint256 i = 0; i < totalSize; i++) {
@@ -28,11 +28,16 @@ contract CalldataTest {
         pid = (pid & ~(uint256(0xFF) << 180)) | (uint256(100) << 180);
         for (uint256 i = 0; i < 32; i++) { cd[4 + i] = bytes1(uint8(pid >> (8 * (31 - i)))); }
         
-        cd[36] = 0xFF; cd[67] = 0x01;
-        cd[68] = 0xFF; cd[99] = 0x02;
-        cd[100] = 0x01;
+        uint256 logPriceMin = (seed % (uint256(1) << 63)) + (uint256(1) << 63) + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[36 + i] = bytes1(uint8(logPriceMin >> (8 * (31 - i)))); }
         
-        uint256 hookPtr = 164 + hookOffset;
+        uint256 logPriceMax = logPriceMin + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[68 + i] = bytes1(uint8(logPriceMax >> (8 * (31 - i)))); }
+        
+        int256 shares = int256(uint256(seed) % (uint256(uint128(type(int128).max)))) + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[100 + i] = bytes1(uint8(uint256(shares) >> (8 * (31 - i)))); }
+        
+        uint256 hookPtr = 136 + hookOffset;
         for (uint256 i = 0; i < 32; i++) { cd[132 + i] = bytes1(uint8(hookPtr >> (8 * (31 - i)))); }
         
         for (uint256 i = 0; i < 32; i++) { cd[hookPtr + i] = bytes1(uint8(hookSize >> (8 * (31 - i)))); }
@@ -50,9 +55,10 @@ contract CalldataTest {
     function testVaryingHookSize(uint256 seed, uint16 rawSize) public {
         uint16 size = uint16((rawSize % MAX_HOOK_SIZE) + 1);
         
-        bytes memory cd = new bytes(260 + size);
+        uint256 totalSize = 168 + size;
+        bytes memory cd = new bytes(totalSize);
         
-        for (uint256 i = 0; i < cd.length; i++) {
+        for (uint256 i = 0; i < totalSize; i++) {
             cd[i] = bytes1(uint8(seed >> (8 * (i % 32))));
         }
         
@@ -62,13 +68,18 @@ contract CalldataTest {
         pid = (pid & ~(uint256(0xFF) << 180)) | (uint256(100) << 180);
         for (uint256 i = 0; i < 32; i++) { cd[4 + i] = bytes1(uint8(pid >> (8 * (31 - i)))); }
         
-        cd[36] = 0xFF; cd[67] = 0x01;
-        cd[68] = 0xFF; cd[99] = 0x02;
-        cd[100] = 0x01;
+        uint256 logPriceMin = (seed % (uint256(1) << 63)) + (uint256(1) << 63) + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[36 + i] = bytes1(uint8(logPriceMin >> (8 * (31 - i)))); }
         
-        for (uint256 i = 0; i < 32; i++) { cd[132 + i] = bytes1(uint8(196 >> (8 * (31 - i)))); }
-        for (uint256 i = 0; i < 32; i++) { cd[196 + i] = bytes1(uint8(size >> (8 * (31 - i)))); }
-        for (uint256 i = 0; i < size; i++) { cd[228 + i] = bytes1(uint8(seed >> (8 * ((i + 11) % 32)))); }
+        uint256 logPriceMax = logPriceMin + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[68 + i] = bytes1(uint8(logPriceMax >> (8 * (31 - i)))); }
+        
+        int256 shares = int256(uint256(seed) % (uint256(uint128(type(int128).max)))) + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[100 + i] = bytes1(uint8(uint256(shares) >> (8 * (31 - i)))); }
+        
+        for (uint256 i = 0; i < 32; i++) { cd[132 + i] = bytes1(uint8(168 >> (8 * (31 - i)))); }
+        for (uint256 i = 0; i < 32; i++) { cd[168 + i] = bytes1(uint8(size >> (8 * (31 - i)))); }
+        for (uint256 i = 0; i < size; i++) { cd[200 + i] = bytes1(uint8(seed >> (8 * ((i + 11) % 32)))); }
         
         (bool ok, ) = address(wrapper).call(cd);
         
@@ -81,10 +92,11 @@ contract CalldataTest {
     function testArbitraryHookPosition(uint256 seed, uint16 position) public {
         position = position % 512;
         
-        uint256 hookPtr = 164 + position;
-        bytes memory cd = new bytes(260 + position + 256);
+        uint256 hookPtr = 136 + position;
+        uint256 totalSize = hookPtr + 32 + 256;
+        bytes memory cd = new bytes(totalSize);
         
-        for (uint256 i = 0; i < cd.length; i++) {
+        for (uint256 i = 0; i < totalSize; i++) {
             cd[i] = bytes1(uint8(seed >> (8 * (i % 32))));
         }
         
@@ -94,9 +106,14 @@ contract CalldataTest {
         pid = (pid & ~(uint256(0xFF) << 180)) | (uint256(100) << 180);
         for (uint256 i = 0; i < 32; i++) { cd[4 + i] = bytes1(uint8(pid >> (8 * (31 - i)))); }
         
-        cd[36] = 0xFF; cd[67] = 0x01;
-        cd[68] = 0xFF; cd[99] = 0x02;
-        cd[100] = 0x01;
+        uint256 logPriceMin = (seed % (uint256(1) << 63)) + (uint256(1) << 63) + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[36 + i] = bytes1(uint8(logPriceMin >> (8 * (31 - i)))); }
+        
+        uint256 logPriceMax = logPriceMin + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[68 + i] = bytes1(uint8(logPriceMax >> (8 * (31 - i)))); }
+        
+        int256 shares = int256(uint256(seed) % (uint256(uint128(type(int128).max)))) + 1;
+        for (uint256 i = 0; i < 32; i++) { cd[100 + i] = bytes1(uint8(uint256(shares) >> (8 * (31 - i)))); }
         
         for (uint256 i = 0; i < 32; i++) { cd[132 + i] = bytes1(uint8(hookPtr >> (8 * (31 - i)))); }
         
